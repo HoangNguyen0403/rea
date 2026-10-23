@@ -53,6 +53,8 @@ type BundleFixture = {
   bundle: string;
   manifestSha256: string;
 };
+const FOREIGN_PLATFORM = process.platform === "linux" ? "darwin" : "linux";
+const FOREIGN_ARCHITECTURE = process.arch === "x64" ? "arm64" : "x64";
 it("accepts a fully retained bundle with its actual dependency closure", async () => {
   const fixture = await createFixture();
 
@@ -207,8 +209,8 @@ it("rejects a bundle that omitted a transitive dependency", async () => {
 
 it("rejects foreign platform compatibility unless inspection is explicit", async () => {
   const fixture = await createFixture({
-    platform: "linux",
-    architecture: "x64",
+    platform: FOREIGN_PLATFORM,
+    architecture: FOREIGN_ARCHITECTURE,
   });
 
   expect(
@@ -310,8 +312,8 @@ it("refuses to replace an existing install without explicit authorization", asyn
 
 it("refuses restore of a foreign platform bundle", async () => {
   const fixture = await createFixture({
-    platform: "linux",
-    architecture: "x64",
+    platform: FOREIGN_PLATFORM,
+    architecture: FOREIGN_ARCHITECTURE,
   });
 
   const result = await run("restore-retained-bundle.mjs", [
@@ -324,7 +326,9 @@ it("refuses restore of a foreign platform bundle", async () => {
   ]);
 
   expect(result.code).toBe(1);
-  expect(result.stderr).toContain("targets linux/x64");
+  expect(result.stderr).toContain(
+    `targets ${FOREIGN_PLATFORM}/${FOREIGN_ARCHITECTURE}`,
+  );
 });
 
 it("requires an externally trusted manifest digest", async () => {

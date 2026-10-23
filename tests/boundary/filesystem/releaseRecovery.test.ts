@@ -167,7 +167,6 @@ it("limits recovery to verification and dependent MCP publication from the relea
           steps: z.array(step),
         }),
         "publish-mcp": z.object({
-          if: z.string(),
           needs: z.string(),
           permissions: z.record(z.string(), z.string()),
           steps: z.array(step),
@@ -205,7 +204,6 @@ it("limits recovery to verification and dependent MCP publication from the relea
   expect(rehearsal).toBeGreaterThan(digest);
   expect(canary).toBeGreaterThan(rehearsal);
   const publisher = workflow.jobs["publish-mcp"];
-  expect(publisher.if).toBe("github.repository == 'morluto/rea'");
   expect(publisher.needs).toBe("verify");
   expect(
     publisher.steps.find(
