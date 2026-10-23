@@ -89,6 +89,8 @@ jobs:
   publish-mcp:
     name: Finish MCP Registry publication
     needs: verify
+    # Fork guard: never claim the upstream MCP Registry identity from a fork.
+    if: github.repository == 'morluto/rea'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

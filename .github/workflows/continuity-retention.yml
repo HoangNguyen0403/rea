@@ -1,0 +1,135 @@
+name: Continuity retention
+
+# Manual, environment-gated release of a retained recovery bundle. This never
+# publishes to npm or the MCP Registry and never overwrites an existing release.
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Draft release tag (continuity-vSEMVER-SHORT_SHA-darwin-arm64)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: continuity-retention
+  cancel-in-progress: false
+
+jobs:
+  retain:
+    name: Build, verify, restore and retain
+    if: >-
+      github.repository == 'HoangNguyen0403/rea' &&
+      github.ref == 'refs/heads/main'
+    runs-on: macos-14
+    timeout-minutes: 60
+    environment: continuity-release
+    steps:
+      - name: Check out exact source revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require the actual retained platform
+        run: |
+          node -e "const assert = require('node:assert/strict'); assert.equal(process.platform, 'darwin'); assert.equal(process.arch, 'arm64'); console.log(JSON.stringify({ platform: process.platform, architecture: process.arch, node: process.version }));"
+
+      - name: Read required submodule content
+        run: git submodule update --init --depth 1 third_party/wakaru
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - run: npm ci
+
+      - name: Build the retained bundle
+        run: |
+          set -euo pipefail
+          node scripts/continuity/build-retained-bundle.mjs \
+            --output .cache/continuity-bundle \
+            --source . | tee "$RUNNER_TEMP/continuity-build.json"
+          node -e "const fs=require('node:fs');const r=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));if(!/^[a-f0-9]{64}$/.test(r.manifestSha256))throw new Error('build omitted manifestSha256');fs.appendFileSync(process.env.GITHUB_ENV,'MANIFEST_SHA256='+r.manifestSha256+'\n');" "$RUNNER_TEMP/continuity-build.json"
+
+      - name: Build the trusted recovery bootstrap
+        run: >-
+          node scripts/continuity/build-bootstrap.mjs
+          --output .cache/continuity-bootstrap
+
+      - name: Verify retained bytes and actual dependencies
+        run: >-
+          node scripts/continuity/verify-retained-bundle.mjs
+          .cache/continuity-bundle
+          --manifest-sha256 "$MANIFEST_SHA256"
+
+      - name: Restore offline into a fresh directory
+        run: >-
+          node .cache/continuity-bootstrap/restore-retained-bundle.mjs
+          --bundle .cache/continuity-bundle
+          --install-dir "$RUNNER_TEMP/rea-continuity-install"
+          --manifest-sha256 "$MANIFEST_SHA256"
+
+      - name: Smoke synthetic static JavaScript
+        run: >-
+          node .cache/continuity-bootstrap/smoke-static-js.mjs
+          --install-dir "$RUNNER_TEMP/rea-continuity-install"
+
+      - name: Package and checksum the release asset
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${RELEASE_TAG}" =~ ^continuity-v[0-9]+\.[0-9]+\.[0-9]+-[0-9a-f]{12}-darwin-arm64$ ]]; then
+            echo "release_tag must match continuity-vSEMVER-SHORT_SHA-darwin-arm64" >&2
+            exit 1
+          fi
+          version="$(node -p "require('./package.json').version")"
+          sha="$(git rev-parse HEAD)"
+          if [[ "${sha}" != "${GITHUB_SHA}" ]]; then
+            echo "checked-out source differs from the dispatched revision" >&2
+            exit 1
+          fi
+          if [[ "${RELEASE_TAG}" != "continuity-v${version}-${sha:0:12}-darwin-arm64" ]]; then
+            echo "release_tag does not match the checked out source and package version" >&2
+            exit 1
+          fi
+          asset="rea-continuity-v${version}-${sha:0:12}-darwin-arm64.tgz"
+          bootstrap_asset="rea-continuity-bootstrap-v${version}-${sha:0:12}-darwin-arm64.tgz"
+          tar -czf "${asset}" -C .cache/continuity-bundle .
+          tar -czf "${bootstrap_asset}" -C .cache/continuity-bootstrap .
+          checksum() {
+            node -e "const {createHash}=require('node:crypto');const {createReadStream}=require('node:fs');const {basename}=require('node:path');const file=process.argv[1];const hash=createHash('sha256');createReadStream(file).on('data',(chunk)=>hash.update(chunk)).on('end',()=>require('node:fs').writeFileSync(file+'.sha256',hash.digest('hex')+'  '+basename(file)+'\\n'));" "$1"
+          }
+          checksum "${asset}"
+          checksum "${bootstrap_asset}"
+          printf '%s  manifest.json\n' "${MANIFEST_SHA256}" > manifest.sha256
+          echo "ASSET=${asset}" >> "$GITHUB_ENV"
+          echo "BOOTSTRAP_ASSET=${bootstrap_asset}" >> "$GITHUB_ENV"
+
+      - name: Refuse to overwrite an existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Release ${RELEASE_TAG} already exists; refusing to overwrite retained assets." >&2
+            exit 1
+          fi
+
+      - name: Create draft release with retained assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          gh release create "${RELEASE_TAG}" \
+            --draft \
+            --title "${RELEASE_TAG}" \
+            --notes "Retained REA continuity bundle and separately authenticated recovery bootstrap. Verify the candidate manifest digest before restore. No npm or MCP Registry publication." \
+            "${ASSET}" "${ASSET}.sha256" \
+            "${BOOTSTRAP_ASSET}" "${BOOTSTRAP_ASSET}.sha256" \
+            manifest.sha256

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- **Fork continuity:** Emit only the declared inventory summary, count actual nested and scoped installed package roots, preserve dependency notices by physical package path, and keep recoverable install state when restore or rollback compensation fails.
+
 ## [6.7.0](https://github.com/morluto/rea/compare/rea-agents-6.6.0...rea-agents-6.7.0) (2026-10-18)
 
 ### Highlights
