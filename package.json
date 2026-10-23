@@ -99,6 +99,13 @@
     "licenses"
   ],
   "scripts": {
+    "continuity:sync": "node scripts/continuity/propose-upstream-sync.mjs",
+    "continuity:bundle": "node scripts/continuity/build-retained-bundle.mjs",
+    "continuity:bootstrap": "node scripts/continuity/build-bootstrap.mjs",
+    "continuity:verify": "node scripts/continuity/verify-retained-bundle.mjs",
+    "continuity:restore": "node scripts/continuity/restore-retained-bundle.mjs",
+    "continuity:rollback": "node scripts/continuity/rollback-retained-install.mjs",
+    "continuity:smoke": "node scripts/continuity/smoke-static-js.mjs",
     "release:notes": "node scripts/release-notes.mjs",
     "deps:check": "node scripts/check-dependency-install.mjs",
     "metadata:generate": "node scripts/run-exclusive.mjs artifacts node scripts/generate-package-metadata.mjs",

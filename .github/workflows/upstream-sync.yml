@@ -1,0 +1,63 @@
+name: Upstream continuity sync
+
+# Trusted-base automation only: schedule/dispatch runs checkout the reviewed
+# default branch. No pull_request or pull_request_target trigger exists, so
+# unreviewed fork code never receives the write token.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+    inputs:
+      upstream_url:
+        description: Upstream Git URL to propose
+        required: false
+        default: https://github.com/morluto/rea.git
+        type: string
+      dry_run:
+        description: Inspect mergeability without pushing or opening a PR
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: upstream-continuity-sync
+  cancel-in-progress: false
+
+jobs:
+  propose:
+    name: Propose reviewed upstream merge
+    if: >-
+      github.repository == 'HoangNguyen0403/rea' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out trusted default branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Propose one reviewed sync for this upstream revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          UPSTREAM_URL: ${{ inputs.upstream_url || 'https://github.com/morluto/rea.git' }}
+          DRY_RUN_ARG: ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: >-
+          node scripts/continuity/propose-upstream-sync.mjs
+          --repository "$GITHUB_REPOSITORY"
+          --upstream-url "$UPSTREAM_URL"
+          --upstream-branch main
+          --base-branch main
+          $DRY_RUN_ARG
