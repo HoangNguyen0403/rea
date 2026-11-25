@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "kind": "rea-upstream-sync-conflict",
+  "createdAt": "2026-11-25T06:30:09.258Z",
+  "upstream": {
+    "url": "https://github.com/morluto/rea.git",
+    "ref": "main",
+    "sha": "299c592b636de2080f6ce123e5fbc58effce45f2"
+  },
+  "base": {
+    "branch": "main",
+    "sha": "08a7b78f4378b7a7633c02c762da6e95895bedb2"
+  },
+  "conflictPaths": [
+    ".github/workflows/release-recovery.yml",
+    ".github/workflows/release.yml",
+    "CHANGELOG.md",
+    "tests/boundary/filesystem/releaseWorkflow.test.ts"
+  ],
+  "mergeBasePreserved": true,
+  "guidance": "Resolve this branch locally without force-pushing. The base branch and local patches were not modified."
+}
